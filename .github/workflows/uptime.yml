@@ -1,0 +1,58 @@
+name: uptime
+
+# Free external uptime monitor for vesmg.com. Runs on GitHub's infrastructure
+# (independent of Azure AND of Brian's machine) every ~5 minutes. On a CONFIRMED
+# non-200 it pings ntfy (topic held in the NTFY_TOPIC repo secret) so Brian's phone
+# alerts within minutes instead of him finding out in a meeting.
+#
+# Why a separate PUBLIC repo: GitHub Actions minutes are FREE and unlimited on
+# public repositories, so this costs $0/mo. (The same cron on the private vesmg
+# repo would bill ~$50/mo.) No secrets live in the code — the ntfy topic is a
+# repo secret so a stranger who finds this repo can't spam the phone.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # GitHub-hosted cron; can lag a few min under load
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check vesmg.com and alert on failure
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          set -uo pipefail
+          URLS="https://vesmg.com/ https://vesmg.com/esva"
+          probe() { curl -s -o /dev/null -m 25 -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
+          down=""
+          for u in $URLS; do
+            c=$(probe "$u")
+            if [ "$c" != "200" ]; then
+              sleep 12                 # confirm — ignore a single blip / cold-start
+              c=$(probe "$u")
+              [ "$c" != "200" ] && down="${down} ${u}=${c}"
+            fi
+          done
+          if [ -n "$down" ]; then
+            echo "DOWN:$down"
+            if [ -n "${NTFY_TOPIC:-}" ]; then
+              printf 'vesmg.com is DOWN:%s\n\nchecked %s UTC' "$down" "$(date -u +%H:%M)" \
+                | curl -s -m 20 \
+                    -H "Title: vesmg.com is DOWN" \
+                    -H "Priority: urgent" \
+                    -H "Tags: rotating_light" \
+                    -H "Click: https://vesmg.com/esva" \
+                    --data-binary @- "https://ntfy.sh/${NTFY_TOPIC}" >/dev/null || true
+            fi
+            exit 1
+          fi
+          echo "all monitored URLs return 200"

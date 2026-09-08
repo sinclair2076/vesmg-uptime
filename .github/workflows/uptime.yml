@@ -31,7 +31,7 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           set -uo pipefail
-          URLS="https://vesmg.com/ https://vesmg.com/esva"
+          URLS="https://vesmg.com/ https://vesmg.com/esva https://stewardwise.io/ https://charliemikemoney.com/"
           probe() { curl -s -o /dev/null -m 25 -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
           down=""
           for u in $URLS; do

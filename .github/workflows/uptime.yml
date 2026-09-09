@@ -31,8 +31,12 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           set -uo pipefail
-          URLS="https://vesmg.com/ https://vesmg.com/esva https://stewardwise.io/ https://charliemikemoney.com/"
-          probe() { curl -s -o /dev/null -m 25 -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
+          # social.vesmg.com and /private are auth-gated: they 307 -> a login page
+          # that returns 200. -L follows the redirect so "up" = final 200 (a naive
+          # no-redirect check would see 307 and false-alarm). Direct-200 sites are
+          # unaffected by -L.
+          URLS="https://vesmg.com/ https://vesmg.com/esva https://stewardwise.io/ https://charliemikemoney.com/ https://social.vesmg.com/ https://vesmg.com/private"
+          probe() { curl -s -o /dev/null -L -m 25 -w '%{http_code}' "$1" 2>/dev/null || echo 000; }
           down=""
           for u in $URLS; do
             c=$(probe "$u")
